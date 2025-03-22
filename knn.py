@@ -14,10 +14,9 @@ from sklearn.preprocessing import OneHotEncoder
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import GridSearchCV
 #---------------------------
-# 1. Modelo KNN de SalePrice
+# Modelo KNN de SalePrice
 #---------------------------
 sale = pd.read_csv('train.csv')
-
 
 X = sale.drop(columns=['SalePrice'])
 y = sale['SalePrice']
@@ -25,16 +24,16 @@ y = sale['SalePrice']
 categorical_columns = X.select_dtypes(include=['object']).columns
 numerical_columns = X.select_dtypes(include=['number']).columns
 
-X_train, X_test,y_train, y_test = train_test_split(X, y,test_size=0.3,train_size=0.7, random_state=42)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, train_size=0.7, random_state=42)
 
-#NA y preprocesor
+# Preprocesamiento para regresión
 preprocessor = ColumnTransformer([
     ('num', Pipeline([
-        ('imputer', SimpleImputer(strategy='median')),  #Mediana
+        ('imputer', SimpleImputer(strategy='median')),  # Mediana
         ('scaler', StandardScaler())
     ]), numerical_columns),
     ('cat', Pipeline([
-        ('imputer', SimpleImputer(strategy='most_frequent')),  #moda
+        ('imputer', SimpleImputer(strategy='most_frequent')),  # Moda
         ('encoder', OneHotEncoder(handle_unknown='ignore'))
     ]), categorical_columns)
 ])
@@ -50,7 +49,7 @@ pram_tune = {
     'knn__p': [1, 2]
 }
 
-grid_search = GridSearchCV(pipeline, pram_tune, cv = 5, scoring='neg_mean_squared_error', n_jobs=-1)
+grid_search = GridSearchCV(pipeline, pram_tune, cv=5, scoring='neg_mean_squared_error', n_jobs=-1)
 grid_search.fit(X_train, y_train)
 knn_tuned = grid_search.best_estimator_
 
@@ -64,9 +63,8 @@ print(f"RMSE KNN = {round(rmse, 3)}")
 print(f"R² KNN = {round(r2, 3)}")
 
 # ---------------------------
-# 4. Modelo de Clasificación
+# Modelo de Clasificación
 # ---------------------------
-
 # Creamos la variable categórica 'PriceCat' a partir de 'SalePrice'
 sale['PriceCat'] = pd.qcut(sale['SalePrice'], q=3, labels=['barata', 'media', 'cara'])
 
@@ -83,7 +81,7 @@ le = LabelEncoder()
 y_train_cls_enc = le.fit_transform(y_train_cls)
 y_test_cls_enc = le.transform(y_test_cls)
 
-# Preprocesamiento: obtenemos columnas numéricas y categóricas
+# Preprocesamiento para clasificación
 numerical_columns_cls = X_class.select_dtypes(include=['number']).columns
 categorical_columns_cls = X_class.select_dtypes(include=['object']).columns
 
@@ -107,14 +105,13 @@ pipeline_cls = Pipeline([
     ('knn', KNeighborsClassifier())
 ])
 
-# Grid de hiperparámetros
+# Grid de hiperparámetros para clasificación
 param_grid_cls = {
     'knn__n_neighbors': [3, 5, 7, 9, 11, 15, 21],
     'knn__weights': ['uniform', 'distance'],
     'knn__p': [1, 2]
 }
 
-# Ajuste con GridSearchCV usando scoring 'accuracy'
 grid_search_cls = GridSearchCV(pipeline_cls, param_grid_cls, cv=5, scoring='accuracy', n_jobs=-1)
 grid_search_cls.fit(X_train_cls, y_train_cls_enc)
 knn_tuned_cls = grid_search_cls.best_estimator_
@@ -122,8 +119,122 @@ knn_tuned_cls = grid_search_cls.best_estimator_
 # Predicción en el conjunto de prueba
 y_pred_cls_enc = knn_tuned_cls.predict(X_test_cls)
 
-# Evaluación
+# Evaluación de clasificación
 accuracy = accuracy_score(y_test_cls_enc, y_pred_cls_enc)
 print(f"Accuracy KNN Clasificación = {round(accuracy, 3)}")
 print("\nReporte de Clasificación:")
 print(classification_report(y_test_cls_enc, y_pred_cls_enc, target_names=le.classes_))
+
+# ---------------------------
+# Inciso 8
+# ---------------------------
+from sklearn.model_selection import cross_val_score
+
+# Validación Cruzada para el modelo de regresión (mejor modelo tunado)
+cv_scores_reg = cross_val_score(knn_tuned, X_train, y_train, cv=5, scoring='neg_mean_squared_error')
+cv_rmse_reg = np.mean(np.sqrt(-cv_scores_reg))
+print("\nValidación Cruzada - Regresión")
+print("CV RMSE:", round(cv_rmse_reg, 3))
+
+# Validación Cruzada para el modelo de clasificación (mejor modelo tunado)
+cv_scores_cls = cross_val_score(knn_tuned_cls, X_train_cls, y_train_cls_enc, cv=5, scoring='accuracy')
+print("\nValidación Cruzada - Clasificación")
+print("CV Accuracy:", round(np.mean(cv_scores_cls), 3))
+
+# ---------------------------
+# Inciso 9
+# ---------------------------
+# Para regresión: Modelo Base sin tuning
+base_pipeline = Pipeline([
+    ('preprocessing', preprocessor),
+    ('knn', KNeighborsRegressor())
+])
+base_pipeline.fit(X_train, y_train)
+y_pred_base = base_pipeline.predict(X_test)
+mae_base = mean_absolute_error(y_test, y_pred_base)
+rmse_base = np.sqrt(mean_squared_error(y_test, y_pred_base))
+r2_base = r2_score(y_test, y_pred_base)
+print("\nModelo Base (Regresión) - Sin tuning")
+print(f"MAE Base = {round(mae_base, 3)}")
+print(f"RMSE Base = {round(rmse_base, 3)}")
+print(f"R² Base = {round(r2_base, 3)}")
+# Nota: Los hiperparámetros tunables en KNN son: n_neighbors, weights y p.
+
+# Para clasificación: Modelo Base sin tuning
+base_pipeline_cls = Pipeline([
+    ('preprocessing', preprocessor_cls),
+    ('knn', KNeighborsClassifier())
+])
+base_pipeline_cls.fit(X_train_cls, y_train_cls_enc)
+y_pred_base_cls = base_pipeline_cls.predict(X_test_cls)
+accuracy_base = accuracy_score(y_test_cls_enc, y_pred_base_cls)
+print("\nModelo Base (Clasificación) - Sin tuning")
+print(f"Accuracy Base = {round(accuracy_base, 3)}")
+
+# ---------------------------
+# Inciso 10
+# ---------------------------
+import time
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.naive_bayes import GaussianNB
+
+# Para Naive Bayes, convertimos la salida de OneHotEncoder a denso.
+from sklearn.preprocessing import FunctionTransformer
+to_dense = FunctionTransformer(lambda x: x.toarray(), accept_sparse=True)
+
+# Medición de tiempos para el modelo KNN (clasificación tunado)
+start = time.time()
+knn_tuned_cls.fit(X_train_cls, y_train_cls_enc)
+knn_train_time = time.time() - start
+start = time.time()
+_ = knn_tuned_cls.predict(X_test_cls)
+knn_pred_time = time.time() - start
+
+# Árbol de Decisión
+pipeline_dt = Pipeline([
+    ('preprocessing', preprocessor_cls),
+    ('dt', DecisionTreeClassifier(random_state=42))
+])
+start = time.time()
+pipeline_dt.fit(X_train_cls, y_train_cls_enc)
+dt_train_time = time.time() - start
+start = time.time()
+y_pred_dt = pipeline_dt.predict(X_test_cls)
+dt_pred_time = time.time() - start
+dt_accuracy = accuracy_score(y_test_cls_enc, y_pred_dt)
+
+# Random Forest
+pipeline_rf = Pipeline([
+    ('preprocessing', preprocessor_cls),
+    ('rf', RandomForestClassifier(random_state=42))
+])
+start = time.time()
+pipeline_rf.fit(X_train_cls, y_train_cls_enc)
+rf_train_time = time.time() - start
+start = time.time()
+y_pred_rf = pipeline_rf.predict(X_test_cls)
+rf_pred_time = time.time() - start
+rf_accuracy = accuracy_score(y_test_cls_enc, y_pred_rf)
+
+# Naive Bayes
+pipeline_nb = Pipeline([
+    ('preprocessing', preprocessor_cls),
+    ('to_dense', to_dense),
+    ('nb', GaussianNB())
+])
+start = time.time()
+pipeline_nb.fit(X_train_cls, y_train_cls_enc)
+nb_train_time = time.time() - start
+start = time.time()
+y_pred_nb = pipeline_nb.predict(X_test_cls)
+nb_pred_time = time.time() - start
+nb_accuracy = accuracy_score(y_test_cls_enc, y_pred_nb)
+
+print("\nComparación de modelos de clasificación:")
+print(f"KNN Tuned: Accuracy = {round(accuracy,3)}, Tiempo de entrenamiento = {knn_train_time:.3f}s, Tiempo de predicción = {knn_pred_time:.3f}s")
+print(f"Árbol de Decisión: Accuracy = {round(dt_accuracy,3)}, Tiempo de entrenamiento = {dt_train_time:.3f}s, Tiempo de predicción = {dt_pred_time:.3f}s")
+print(f"Random Forest: Accuracy = {round(rf_accuracy,3)}, Tiempo de entrenamiento = {rf_train_time:.3f}s, Tiempo de predicción = {rf_pred_time:.3f}s")
+print(f"Naive Bayes: Accuracy = {round(nb_accuracy,3)}, Tiempo de entrenamiento = {nb_train_time:.3f}s, Tiempo de predicción = {nb_pred_time:.3f}s")
+# Para ser más preciso se realizó nuevamente los otros métodos en este mismo archivo y con el mismo database
+# Sí, fue dolor. Más o menos
